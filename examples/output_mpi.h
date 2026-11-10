@@ -67,47 +67,58 @@ Updated 2024/12/20: the newest Basilisk output_matrix is already compatible with
 //   matrix_free (ppm);
 // }
 
-void output_matrix_mpi (scalar f,
-		    FILE * fp = stdout,
-		    int n = N,
-		    bool linear = false)
-{
-  if (n == 0) n = N;
-  if (!fp) fp = stdout;
-  float fn = n, Delta = L0/fn;
-  float ** field = matrix_new (n, n, sizeof(float));
+/* Note: the signature below was rewritten into the "struct parameter" style
+   used by the (2021-12) Basilisk snapshot provided in basilisk.tar.gz. The
+   previous signature used the newer (2023+) default-argument style which that
+   qcc does not support. Calls such as
+     output_matrix_mpi (f, fp, n, linear = true)
+   are unchanged: qcc translates them into a compound literal of the struct. */
 
-  for (int i = 0; i < n; i++) {
+struct OutputMatrixMpi {
+  scalar f;
+  FILE * fp;
+  int n;
+  bool linear;
+};
+
+void output_matrix_mpi (struct OutputMatrixMpi p)
+{
+  if (p.n == 0) p.n = N;
+  if (!p.fp) p.fp = stdout;
+  float fn = p.n, Delta = L0/fn;
+  float ** field = matrix_new (p.n, p.n, sizeof(float));
+
+  for (int i = 0; i < p.n; i++) {
     float xp = Delta*i + X0 + Delta/2.;
-    for (int j = 0; j < n; j++) {
+    for (int j = 0; j < p.n; j++) {
       float yp = Delta*j + Y0 + Delta/2.;
-      field[i][j] = interpolate(f, xp, yp, linear);
+      field[i][j] = interpolate(p.f, xp, yp, p.linear);
     }
   }
 
   if (pid() == 0) { // master
 @if _MPI
-    MPI_Reduce (MPI_IN_PLACE, field[0], n*n, MPI_FLOAT, MPI_MIN, 0,MPI_COMM_WORLD);
+    MPI_Reduce (MPI_IN_PLACE, field[0], p.n*p.n, MPI_FLOAT, MPI_MIN, 0,MPI_COMM_WORLD);
 @endif
 
-    fwrite (&fn, sizeof(float), 1, fp);
-    for (int j = 0; j < n; j++) {
+    fwrite (&fn, sizeof(float), 1, p.fp);
+    for (int j = 0; j < p.n; j++) {
       float yp = Delta*j + Y0 + Delta/2.;
-      fwrite (&yp, sizeof(float), 1, fp);
+      fwrite (&yp, sizeof(float), 1, p.fp);
     }
 
-    for (int i = 0; i < n; i++){
+    for (int i = 0; i < p.n; i++){
       float xp = Delta*i + X0 + Delta/2.;
-      fwrite (&xp, sizeof(float), 1, fp);
-      for (int j = 0; j < n; j++) {
-        fwrite (&field[i][j], sizeof(float), 1, fp);
+      fwrite (&xp, sizeof(float), 1, p.fp);
+      for (int j = 0; j < p.n; j++) {
+        fwrite (&field[i][j], sizeof(float), 1, p.fp);
       }
     }
-    fflush (fp);
+    fflush (p.fp);
   }
 @if _MPI
   else // slave
-  MPI_Reduce (field[0], NULL, n*n, MPI_FLOAT, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Reduce (field[0], NULL, p.n*p.n, MPI_FLOAT, MPI_MIN, 0, MPI_COMM_WORLD);
 @endif
 
   matrix_free (field);

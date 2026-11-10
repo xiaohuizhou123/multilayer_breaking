@@ -30,17 +30,20 @@ void power_input() {
 //  ky_[N_mode_] = 2.*pi/L0*N_mode_/2; 
 
 /* If using MPI. **/
-#if _MPI 
+#if _MPI
   int length1D, length2D; // The length of the array to be read
   int rank, size;
   int root = 0;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  // Set on all ranks: these are also the MPI_Bcast counts below, which must
+  // be valid on every process, not only on root.
+  length2D = N_mode_*(N_mode_+1);
+  length1D = N_mode_;
 
   // Read in on the zeroth thread
   if (rank == root) {
     // First read in F_kxky_
-    length2D = N_mode_*(N_mode_+1);
     float * a = (float*) malloc (sizeof(float)*length2D);
     char filename[100];
     sprintf (filename, "F_kxky");
